@@ -279,7 +279,11 @@ class EPaxosSimulator {
         const okMsgs = this.messages.filter(m => 
             m.type === 'PreAcceptOK' && m.to === r && m.commandId === id
         );
-        okMsgs.push(msg); // Include current message
+        
+        // Verify current message matches criteria before adding
+        if (msg.type === 'PreAcceptOK' && msg.to === r && msg.commandId === id) {
+            okMsgs.push(msg);
+        }
         
         // Check if we have a quorum
         if (okMsgs.length >= this.QUORUM_SIZE) {
@@ -292,8 +296,9 @@ class EPaxosSimulator {
             }
             
             // Check for fast path (fast quorum + all same deps as initial)
+            const initialDeps = this.initDep[r] && this.initDep[r][id] ? this.initDep[r][id] : new Set();
             const canFastCommit = okMsgs.length >= this.FAST_QUORUM_SIZE &&
-                okMsgs.every(m => this.setsEqual(m.dep, this.initDep[r][id]));
+                okMsgs.every(m => this.setsEqual(m.dep, initialDeps));
             
             // Remove processed PreAcceptOK messages
             this.messages = this.messages.filter(m => 
@@ -367,7 +372,11 @@ class EPaxosSimulator {
         const okMsgs = this.messages.filter(m => 
             m.type === 'AcceptOK' && m.to === r && m.commandId === id && m.bal === msg.bal
         );
-        okMsgs.push(msg);
+        
+        // Verify current message matches criteria before adding
+        if (msg.type === 'AcceptOK' && msg.to === r && msg.commandId === id && msg.bal === this.bal[r][id]) {
+            okMsgs.push(msg);
+        }
         
         if (okMsgs.length >= this.QUORUM_SIZE) {
             // Remove processed AcceptOK messages
@@ -405,6 +414,7 @@ class EPaxosSimulator {
     }
     
     setsEqual(set1, set2) {
+        if (!set1 || !set2) return false;
         if (set1.size !== set2.size) return false;
         for (const item of set1) {
             if (!set2.has(item)) return false;
