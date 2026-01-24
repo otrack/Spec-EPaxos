@@ -6,6 +6,8 @@ class EPaxosSimulator {
         this.NUM_REPLICAS = 5;
         this.QUORUM_SIZE = 3; // N - F where N=5, F=2
         this.FAST_QUORUM_SIZE = 4; // N - E where E=1
+        this.MAX_MESSAGE_DELAY = 200; // Maximum random network delay in ms
+        this.MAX_VISIBLE_HISTORY_ENTRIES = 15; // Number of history entries to display
         
         // Protocol state (similar to TLA+ variables)
         this.bal = {}; // ballot number per replica per command
@@ -143,8 +145,8 @@ class EPaxosSimulator {
         const historyEl = document.getElementById('execution-history');
         if (!historyEl) return;
         
-        // Show last 15 entries
-        const recentHistory = this.executionHistory.slice(-15);
+        // Show last MAX_VISIBLE_HISTORY_ENTRIES entries
+        const recentHistory = this.executionHistory.slice(-this.MAX_VISIBLE_HISTORY_ENTRIES);
         historyEl.innerHTML = recentHistory.map(entry => 
             `<div class="history-entry" style="border-left-color: ${entry.color}">
                 <span class="history-time">${entry.timestamp}</span>
@@ -172,8 +174,8 @@ class EPaxosSimulator {
     }
     
     addMessageWithRandomDelay(msg) {
-        // Add random network delay (0-200ms simulation time)
-        const delay = Math.random() * 200;
+        // Add random network delay (0-MAX_MESSAGE_DELAY ms simulation time)
+        const delay = Math.random() * this.MAX_MESSAGE_DELAY;
         const deliveryTime = this.currentTime + delay;
         
         msg.deliveryTime = deliveryTime;
@@ -782,7 +784,7 @@ class EPaxosSimulator {
                 m.phase === 'preaccepted' && this.setsEqual(m.dep, m.initDep)
             );
             
-            if (preacceptedMsgs.length >= this.NUM_REPLICAS - this.FAST_QUORUM_SIZE + okMsgs.length) {
+            if (this.isValidFastPathRecoveryQuorum(preacceptedMsgs.length, okMsgs.length)) {
                 const msg0 = preacceptedMsgs[0];
                 // Send Accept with recovered value
                 for (let replica = 0; replica < this.NUM_REPLICAS; replica++) {
@@ -828,9 +830,10 @@ class EPaxosSimulator {
         return true;
     }
     
-    updateStatus(message) {
-        // Deprecated - now using history
-        this.addToHistory(message, 'system');
+    isValidFastPathRecoveryQuorum(preacceptedCount, okMsgCount) {
+        // Check if we have enough preaccepted messages for fast-path recovery
+        // Formula: preacceptedCount >= N - F_fast + okMsgCount
+        return preacceptedCount >= this.NUM_REPLICAS - this.FAST_QUORUM_SIZE + okMsgCount;
     }
     
     updateUI() {
