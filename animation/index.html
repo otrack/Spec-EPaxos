@@ -38,12 +38,15 @@
             </div>
 
             <div class="controls">
-                <h3>Animation Controls</h3>
+                <h3>Execution Control</h3>
                 <div class="button-group">
                     <button id="step-btn" class="btn">Step</button>
                     <button id="play-btn" class="btn">Play</button>
                     <button id="pause-btn" class="btn" disabled>Pause</button>
                     <button id="reset-btn" class="btn btn-danger">Reset</button>
+                </div>
+                <div class="button-group" style="margin-top: 10px;">
+                    <button id="recovery-btn" class="btn btn-warning">Start Recovery</button>
                 </div>
                 <div class="control-group">
                     <label for="speed-slider">Speed:</label>
@@ -53,17 +56,22 @@
             </div>
 
             <div class="status">
-                <h3>Status</h3>
-                <div id="status-message">Ready to submit commands</div>
+                <h3>Execution History</h3>
+                <div id="execution-history" class="execution-history"></div>
                 <div class="message-queue">
                     <strong>Message Queue:</strong> <span id="queue-count">0</span> messages
                 </div>
             </div>
         </div>
 
+        <div class="message-animation-layer" id="message-animation-layer"></div>
+
         <div class="replicas-container">
             <div class="replica" data-replica="0">
-                <div class="replica-header">Replica 0</div>
+                <div class="replica-header">
+                    Replica 0
+                    <button id="disconnect-btn-0" class="btn-disconnect">Disconnect</button>
+                </div>
                 <div class="replica-state">
                     <h4>Commands</h4>
                     <div class="commands-list" id="commands-0"></div>
@@ -72,7 +80,10 @@
                 </div>
             </div>
             <div class="replica" data-replica="1">
-                <div class="replica-header">Replica 1</div>
+                <div class="replica-header">
+                    Replica 1
+                    <button id="disconnect-btn-1" class="btn-disconnect">Disconnect</button>
+                </div>
                 <div class="replica-state">
                     <h4>Commands</h4>
                     <div class="commands-list" id="commands-1"></div>
@@ -81,7 +92,10 @@
                 </div>
             </div>
             <div class="replica" data-replica="2">
-                <div class="replica-header">Replica 2</div>
+                <div class="replica-header">
+                    Replica 2
+                    <button id="disconnect-btn-2" class="btn-disconnect">Disconnect</button>
+                </div>
                 <div class="replica-state">
                     <h4>Commands</h4>
                     <div class="commands-list" id="commands-2"></div>
@@ -90,7 +104,10 @@
                 </div>
             </div>
             <div class="replica" data-replica="3">
-                <div class="replica-header">Replica 3</div>
+                <div class="replica-header">
+                    Replica 3
+                    <button id="disconnect-btn-3" class="btn-disconnect">Disconnect</button>
+                </div>
                 <div class="replica-state">
                     <h4>Commands</h4>
                     <div class="commands-list" id="commands-3"></div>
@@ -99,7 +116,10 @@
                 </div>
             </div>
             <div class="replica" data-replica="4">
-                <div class="replica-header">Replica 4</div>
+                <div class="replica-header">
+                    Replica 4
+                    <button id="disconnect-btn-4" class="btn-disconnect">Disconnect</button>
+                </div>
                 <div class="replica-state">
                     <h4>Commands</h4>
                     <div class="commands-list" id="commands-4"></div>
