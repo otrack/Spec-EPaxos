@@ -476,6 +476,9 @@ class EPaxosSimulator {
             return;
         }
         
+        // Track message reception in timeline (receive dot on recipient's lifeline)
+        this.trackMessageReception(msg);
+        
         this.processMessage(msg);
         this.updateUI();
     }
@@ -970,21 +973,47 @@ class EPaxosSimulator {
     }
     
     trackMessageTimeline(msg) {
-        // Track message for timeline visualization
+        // Track message SEND for timeline visualization (action dot on sender)
+        // Only call this when message is initially sent
         const timelineEntry = {
             id: this.timelineAnimationId++,
             type: msg.type,
             from: msg.from,
             to: msg.to,
             commandId: msg.commandId,
-            timestamp: Date.now(),
-            color: this.getCommandColor(msg.commandId || 'system')
+            timestamp: this.currentTime,
+            color: this.getCommandColor(msg.commandId || 'system'),
+            phase: 'sent' // Mark as sent
         };
         
         this.messageTimeline.push(timelineEntry);
         
-        // Keep only last 20 messages for performance
-        if (this.messageTimeline.length > 20) {
+        // Keep only last 40 entries (20 send + 20 receive pairs)
+        if (this.messageTimeline.length > 40) {
+            this.messageTimeline.shift();
+        }
+        
+        this.updateMessageTimeline();
+    }
+    
+    trackMessageReception(msg) {
+        // Track message RECEPTION for timeline visualization (receive dot on recipient)
+        // Only call this when message is actually delivered
+        const timelineEntry = {
+            id: this.timelineAnimationId++,
+            type: msg.type,
+            from: msg.from,
+            to: msg.to,
+            commandId: msg.commandId,
+            timestamp: this.currentTime,
+            color: this.getCommandColor(msg.commandId || 'system'),
+            phase: 'received' // Mark as received
+        };
+        
+        this.messageTimeline.push(timelineEntry);
+        
+        // Keep only last 40 entries
+        if (this.messageTimeline.length > 40) {
             this.messageTimeline.shift();
         }
         
@@ -996,7 +1025,7 @@ class EPaxosSimulator {
         if (!timelineEl) return;
         
         // Show recent messages in chronological order
-        const recentMessages = this.messageTimeline.slice(-20);
+        const recentMessages = this.messageTimeline.slice(-40);
         
         if (recentMessages.length === 0) {
             timelineEl.innerHTML = '<div style="text-align: center; color: #999; padding: 20px;">No messages yet - submit commands to see the protocol in action</div>';
@@ -1005,9 +1034,9 @@ class EPaxosSimulator {
         
         // Create SVG for timeline visualization
         const width = timelineEl.clientWidth || 800;
-        const height = Math.max(400, recentMessages.length * 30 + 100);
+        const height = Math.max(400, recentMessages.length * 15 + 100);
         const replicaSpacing = width / (this.NUM_REPLICAS + 1);
-        const timeStep = 25; // Vertical space per time unit
+        const timeStep = 15; // Vertical space per time unit
         
         let svg = `<svg width="${width}" height="${height}" style="background: white;">`;
         
@@ -1021,47 +1050,47 @@ class EPaxosSimulator {
             `;
         }
         
-        // Draw messages as actions (dots) and arrows
+        // Draw messages - group 'sent' and 'received' for same message together
         let currentY = 50;
         recentMessages.forEach((msg, idx) => {
             const fromX = replicaSpacing * (msg.from + 1);
             const toX = replicaSpacing * (msg.to + 1);
             const y = currentY + idx * timeStep;
             
-            // Draw action dot at sender
-            svg += `
-                <circle cx="${fromX}" cy="${y}" r="5" fill="${msg.color}" stroke="#333" stroke-width="1">
-                    <title>${msg.type} sent by Replica ${msg.from} (${msg.commandId})</title>
-                </circle>
-            `;
-            
-            // Draw arrow to receiver if different replica
-            if (msg.from !== msg.to) {
-                const arrowY = y + 10;
+            if (msg.phase === 'sent') {
+                // Draw action dot at sender (when message is sent/broadcast)
                 svg += `
-                    <line x1="${fromX}" y1="${y}" x2="${toX}" y2="${arrowY}" 
-                          stroke="${msg.color}" stroke-width="2" opacity="0.6" marker-end="url(#arrowhead-${idx})"/>
-                    <defs>
-                        <marker id="arrowhead-${idx}" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
-                            <polygon points="0 0, 10 3, 0 6" fill="${msg.color}" opacity="0.6"/>
-                        </marker>
-                    </defs>
-                `;
-                
-                // Draw receive dot
-                svg += `
-                    <circle cx="${toX}" cy="${arrowY}" r="4" fill="white" stroke="${msg.color}" stroke-width="2">
-                        <title>${msg.type} received by Replica ${msg.to} (${msg.commandId})</title>
+                    <circle cx="${fromX}" cy="${y}" r="5" fill="${msg.color}" stroke="#333" stroke-width="1">
+                        <title>${msg.type} sent by Replica ${msg.from} (${msg.commandId})</title>
                     </circle>
                 `;
+            } else if (msg.phase === 'received') {
+                // Draw arrow and receive dot (when message is actually delivered)
+                if (msg.from !== msg.to) {
+                    svg += `
+                        <line x1="${fromX}" y1="${y}" x2="${toX}" y2="${y}" 
+                              stroke="${msg.color}" stroke-width="2" opacity="0.6" marker-end="url(#arrowhead-${idx})"/>
+                        <defs>
+                            <marker id="arrowhead-${idx}" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+                                <polygon points="0 0, 10 3, 0 6" fill="${msg.color}" opacity="0.6"/>
+                            </marker>
+                        </defs>
+                    `;
+                    
+                    // Draw receive dot
+                    svg += `
+                        <circle cx="${toX}" cy="${y}" r="4" fill="white" stroke="${msg.color}" stroke-width="2">
+                            <title>${msg.type} received by Replica ${msg.to} (${msg.commandId})</title>
+                        </circle>
+                    `;
+                    
+                    // Add message type label
+                    const labelX = (fromX + toX) / 2;
+                    svg += `
+                        <text x="${labelX}" y="${y - 3}" text-anchor="middle" font-size="10" fill="#666">${msg.type}</text>
+                    `;
+                }
             }
-            
-            // Add message type label
-            const labelX = (fromX + toX) / 2;
-            const labelY = y + (msg.from !== msg.to ? 5 : -8);
-            svg += `
-                <text x="${labelX}" y="${labelY}" text-anchor="middle" font-size="10" fill="#666">${msg.type}</text>
-            `;
         });
         
         svg += '</svg>';
