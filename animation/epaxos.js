@@ -1040,6 +1040,19 @@ class EPaxosSimulator {
         
         let svg = `<svg width="${width}" height="${height}" style="background: white;">`;
         
+        // Define arrow markers at top level (once) with unique IDs
+        svg += '<defs>';
+        recentMessages.forEach((msg) => {
+            if (msg.phase === 'received' && msg.from !== msg.to) {
+                svg += `
+                    <marker id="arrowhead-${msg.id}" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+                        <polygon points="0 0, 10 3, 0 6" fill="${msg.color}" opacity="0.6"/>
+                    </marker>
+                `;
+            }
+        });
+        svg += '</defs>';
+        
         // Draw vertical lifelines for each replica
         for (let r = 0; r < this.NUM_REPLICAS; r++) {
             const x = replicaSpacing * (r + 1);
@@ -1064,32 +1077,26 @@ class EPaxosSimulator {
                         <title>${msg.type} sent by Replica ${msg.from} (${msg.commandId})</title>
                     </circle>
                 `;
-            } else if (msg.phase === 'received') {
+            } else if (msg.phase === 'received' && msg.from !== msg.to) {
                 // Draw arrow and receive dot (when message is actually delivered)
-                if (msg.from !== msg.to) {
-                    svg += `
-                        <line x1="${fromX}" y1="${y}" x2="${toX}" y2="${y}" 
-                              stroke="${msg.color}" stroke-width="2" opacity="0.6" marker-end="url(#arrowhead-${idx})"/>
-                        <defs>
-                            <marker id="arrowhead-${idx}" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
-                                <polygon points="0 0, 10 3, 0 6" fill="${msg.color}" opacity="0.6"/>
-                            </marker>
-                        </defs>
-                    `;
-                    
-                    // Draw receive dot
-                    svg += `
-                        <circle cx="${toX}" cy="${y}" r="4" fill="white" stroke="${msg.color}" stroke-width="2">
-                            <title>${msg.type} received by Replica ${msg.to} (${msg.commandId})</title>
-                        </circle>
-                    `;
-                    
-                    // Add message type label
-                    const labelX = (fromX + toX) / 2;
-                    svg += `
-                        <text x="${labelX}" y="${y - 3}" text-anchor="middle" font-size="10" fill="#666">${msg.type}</text>
-                    `;
-                }
+                // Only draw if sender != receiver to avoid self-loops
+                svg += `
+                    <line x1="${fromX}" y1="${y}" x2="${toX}" y2="${y}" 
+                          stroke="${msg.color}" stroke-width="2" opacity="0.6" marker-end="url(#arrowhead-${msg.id})"/>
+                `;
+                
+                // Draw receive dot
+                svg += `
+                    <circle cx="${toX}" cy="${y}" r="4" fill="white" stroke="${msg.color}" stroke-width="2">
+                        <title>${msg.type} received by Replica ${msg.to} (${msg.commandId})</title>
+                    </circle>
+                `;
+                
+                // Add message type label
+                const labelX = (fromX + toX) / 2;
+                svg += `
+                    <text x="${labelX}" y="${y - 3}" text-anchor="middle" font-size="10" fill="#666">${msg.type}</text>
+                `;
             }
         });
         
