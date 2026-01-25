@@ -226,12 +226,13 @@ class EPaxosSimulator {
         // In asynchronous mode, use much wider spread of delays
         let delay;
         if (this.asynchronousMode) {
-            // Asynchronous mode: messages can arrive over many rounds
-            // Random delay between 0 and 5x MAX_MESSAGE_DELAY
-            delay = Math.random() * (this.MAX_MESSAGE_DELAY * 5);
+            // Asynchronous mode: messages arrive over MANY rounds
+            // Random delay between 0 and 50 rounds (much larger spread)
+            // This ensures different replicas receive messages in different rounds
+            delay = Math.random() * 50;
         } else {
-            // Synchronous mode: normal randomness
-            delay = Math.random() * this.MAX_MESSAGE_DELAY;
+            // Synchronous mode: small randomness within same round
+            delay = Math.random() * this.MAX_MESSAGE_DELAY / 1000; // Convert ms to rounds (0-0.2 rounds)
         }
         const deliveryTime = this.currentTime + delay;
         
@@ -456,8 +457,14 @@ class EPaxosSimulator {
             return;
         }
         
-        // Increment logical time
-        this.currentTime += 1;
+        // Advance logical time to next message's delivery time
+        // This ensures time progresses realistically in the simulation
+        const nextMsg = this.messages[0];
+        if (nextMsg.deliveryTime) {
+            this.currentTime = nextMsg.deliveryTime;
+        } else {
+            this.currentTime += 1;
+        }
         
         // Process one message
         const msg = this.messages.shift();
