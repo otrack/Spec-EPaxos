@@ -185,11 +185,14 @@ class EPaxosSimulator {
     
     addMessageWithRandomDelay(msg) {
         // Add random network delay (0-MAX_MESSAGE_DELAY ms simulation time)
+        // Each message gets an independent random delay
         const delay = Math.random() * this.MAX_MESSAGE_DELAY;
         const deliveryTime = this.currentTime + delay;
         
-        msg.deliveryTime = deliveryTime;
-        this.messages.push(msg);
+        // Clone the message to avoid mutation issues
+        const msgWithDelay = Object.assign({}, msg);
+        msgWithDelay.deliveryTime = deliveryTime;
+        this.messages.push(msgWithDelay);
         
         // Sort messages by delivery time to simulate network randomization
         this.messages.sort((a, b) => (a.deliveryTime || 0) - (b.deliveryTime || 0));
@@ -277,17 +280,19 @@ class EPaxosSimulator {
         // Send Recover messages to all replicas
         for (let r = 0; r < this.NUM_REPLICAS; r++) {
             if (this.isReplicaConnected(r)) {
-                this.addMessageWithRandomDelay({
+                const recoverMsg = {
                     type: 'Recover',
                     from: replicaId,
                     to: r,
                     commandId: commandId,
                     bal: newBal
-                });
+                };
+                this.addMessageWithRandomDelay(recoverMsg);
+                this.trackMessageTimeline(recoverMsg);
             }
         }
         
-        this.addToHistory(`Replica ${replicaId} sent Recover for ${commandId} with ballot ${newBal}`, commandId);
+        this.addToHistory(`Replica ${replicaId} sent Recover for ${commandId} with ballot ${newBal} [bal=${newBal}]`, commandId);
         this.updateUI();
     }
     
@@ -718,7 +723,7 @@ class EPaxosSimulator {
             const phaseValue = this.phase[r][id] || "Initial";
             
             // Send RecoverOK with random delay
-            this.addMessageWithRandomDelay({
+            const recoverOKMsg = {
                 type: 'RecoverOK',
                 from: r,
                 to: msg.from,
@@ -729,9 +734,11 @@ class EPaxosSimulator {
                 dep: depValue,
                 initDep: initDepValue,
                 phase: phaseValue
-            });
+            };
+            this.addMessageWithRandomDelay(recoverOKMsg);
+            this.trackMessageTimeline(recoverOKMsg);
             
-            this.addToHistory(`Replica ${r} sent RecoverOK for ${id}`, id);
+            this.addToHistory(`Replica ${r} sent RecoverOK for ${id} [bal=${b}]`, id);
         }
     }
     
