@@ -189,11 +189,17 @@ header h1 {
 
 .message-timeline {
     position: relative;
-    min-height: 200px;
+    min-height: 400px;
+    max-height: 600px;
     background-color: #fafafa;
     border: 1px solid #e0e0e0;
     border-radius: 4px;
-    padding: 20px;
+    overflow-y: auto;
+    overflow-x: auto;
+}
+
+.message-timeline svg {
+    display: block;
 }
 
 .replica-row {

@@ -7,12 +7,13 @@ class EPaxosSimulator {
         this.QUORUM_SIZE = 3; // N - F where N=5, F=2
         this.FAST_QUORUM_SIZE = 4; // N - E where E=1
         this.MAX_MESSAGE_DELAY = 200; // Maximum random network delay in ms
-        this.MAX_VISIBLE_HISTORY_ENTRIES = 15; // Number of history entries to display
+        self.MAX_VISIBLE_HISTORY_ENTRIES = 15; // Number of history entries to display
         
         // Protocol state (similar to TLA+ variables)
         this.bal = {}; // ballot number per replica per command
         this.phase = {}; // phase per replica per command
         this.cmd = {}; // command payload per replica per command
+        this.initCmd = {}; // initial command payload received in PreAccept
         this.dep = {}; // dependencies per replica per command
         this.initDep = {}; // initial dependencies
         this.initCoord = {}; // initial coordinator for each command
@@ -70,6 +71,7 @@ class EPaxosSimulator {
             this.bal[r] = {};
             this.phase[r] = {};
             this.cmd[r] = {};
+            this.initCmd[r] = {};
             this.dep[r] = {};
             this.initDep[r] = {};
             this.abal[r] = {};
@@ -81,6 +83,7 @@ class EPaxosSimulator {
         this.bal = {};
         this.phase = {};
         this.cmd = {};
+        this.initCmd = {};
         this.dep = {};
         this.initDep = {};
         this.initCoord = {};
@@ -481,6 +484,7 @@ class EPaxosSimulator {
         if (!this.phase[r][id] || this.phase[r][id] === 'Initial') {
             // Store command and initial deps
             this.cmd[r][id] = msg.cmd;
+            this.initCmd[r][id] = msg.cmd; // Store initial command received in PreAccept
             this.initDep[r][id] = new Set(msg.dep);
             
             // Calculate local dependencies
@@ -555,7 +559,7 @@ class EPaxosSimulator {
                 // Fast path: send Commit with random delays
                 for (let replica = 0; replica < this.NUM_REPLICAS; replica++) {
                     if (this.isReplicaConnected(replica)) {
-                        this.addMessageWithRandomDelay({
+                        const commitMsg = {
                             type: 'Commit',
                             from: r,
                             to: replica,
@@ -563,7 +567,9 @@ class EPaxosSimulator {
                             cmd: this.cmd[r][id],
                             dep: allDeps,
                             bal: 0
-                        });
+                        };
+                        this.addMessageWithRandomDelay(commitMsg);
+                        this.trackMessageTimeline(commitMsg);
                     }
                 }
                 this.addToHistory(`Replica ${r} taking fast path for ${id}`, id);
@@ -571,7 +577,7 @@ class EPaxosSimulator {
                 // Slow path: send Accept with random delays
                 for (let replica = 0; replica < this.NUM_REPLICAS; replica++) {
                     if (this.isReplicaConnected(replica)) {
-                        this.addMessageWithRandomDelay({
+                        const acceptMsg = {
                             type: 'Accept',
                             from: r,
                             to: replica,
@@ -579,7 +585,9 @@ class EPaxosSimulator {
                             cmd: this.cmd[r][id],
                             dep: allDeps,
                             bal: 0
-                        });
+                        };
+                        this.addMessageWithRandomDelay(acceptMsg);
+                        this.trackMessageTimeline(acceptMsg);
                     }
                 }
                 this.addToHistory(`Replica ${r} taking slow path for ${id}`, id);
@@ -596,6 +604,12 @@ class EPaxosSimulator {
         if (!this.bal[r][id] || this.bal[r][id] <= msg.bal) {
             this.bal[r][id] = msg.bal;
             this.cmd[r][id] = msg.cmd;
+            
+            // Set initCmd if not already set
+            if (!this.initCmd[r][id]) {
+                this.initCmd[r][id] = msg.cmd;
+            }
+            
             this.dep[r][id] = new Set(msg.dep);
             this.phase[r][id] = 'accepted';
             
@@ -603,15 +617,17 @@ class EPaxosSimulator {
             this.abal[r][id] = msg.bal;
             
             // Send AcceptOK with random delay
-            this.addMessageWithRandomDelay({
+            const okMsg = {
                 type: 'AcceptOK',
                 from: r,
                 to: msg.from,
                 commandId: id,
                 bal: msg.bal
-            });
+            };
+            this.addMessageWithRandomDelay(okMsg);
+            this.trackMessageTimeline(okMsg);
             
-            this.addToHistory(`Replica ${r} accepted ${msg.cmd} (${id})`, id);
+            this.addToHistory(`Replica ${r} accepted ${msg.cmd} (${id}) [bal=${msg.bal}]`, id);
         }
     }
     
@@ -644,7 +660,7 @@ class EPaxosSimulator {
             // Send Commit to all replicas with random delays
             for (let replica = 0; replica < this.NUM_REPLICAS; replica++) {
                 if (this.isReplicaConnected(replica)) {
-                    this.addMessageWithRandomDelay({
+                    const commitMsg = {
                         type: 'Commit',
                         from: r,
                         to: replica,
@@ -652,11 +668,13 @@ class EPaxosSimulator {
                         cmd: this.cmd[r][id],
                         dep: this.dep[r][id],
                         bal: msg.bal
-                    });
+                    };
+                    this.addMessageWithRandomDelay(commitMsg);
+                    this.trackMessageTimeline(commitMsg);
                 }
             }
             
-            this.addToHistory(`Replica ${r} sending Commit for ${id}`, id);
+            this.addToHistory(`Replica ${r} sending Commit for ${id} [bal=${msg.bal}]`, id);
         }
     }
     
@@ -664,9 +682,15 @@ class EPaxosSimulator {
         const r = msg.to;
         const id = msg.commandId;
         
-        this.addToHistory(`Replica ${r} received Commit for ${id}`, id);
+        this.addToHistory(`Replica ${r} received Commit for ${id} [bal=${msg.bal}]`, id);
         
         this.cmd[r][id] = msg.cmd;
+        
+        // Set initCmd if not already set
+        if (!this.initCmd[r][id]) {
+            this.initCmd[r][id] = msg.cmd;
+        }
+        
         this.dep[r][id] = new Set(msg.dep);
         this.phase[r][id] = 'committed';
         this.bal[r][id] = msg.bal;
@@ -674,7 +698,7 @@ class EPaxosSimulator {
         if (!this.abal[r]) this.abal[r] = {};
         this.abal[r][id] = msg.bal;
         
-        this.addToHistory(`Replica ${r} committed ${msg.cmd} (${id})`, id);
+        this.addToHistory(`Replica ${r} committed ${msg.cmd} (${id}) [bal=${msg.bal}]`, id);
     }
     
     handleRecover(msg) {
@@ -896,55 +920,82 @@ class EPaxosSimulator {
         const timelineEl = document.getElementById('message-timeline');
         if (!timelineEl) return;
         
-        // Show recent messages
-        const recentMessages = this.messageTimeline.slice(-10);
+        // Show recent messages in chronological order
+        const recentMessages = this.messageTimeline.slice(-20);
         
         if (recentMessages.length === 0) {
-            timelineEl.innerHTML = '<div style="text-align: center; color: #999; padding: 20px;">No messages yet</div>';
+            timelineEl.innerHTML = '<div style="text-align: center; color: #999; padding: 20px;">No messages yet - submit commands to see the protocol in action</div>';
             return;
         }
         
-        let html = '';
+        // Create SVG for timeline visualization
+        const width = timelineEl.clientWidth || 800;
+        const height = Math.max(400, recentMessages.length * 30 + 100);
+        const replicaSpacing = width / (this.NUM_REPLICAS + 1);
+        const timeStep = 25; // Vertical space per time unit
+        
+        let svg = `<svg width="${width}" height="${height}" style="background: white;">`;
+        
+        // Draw vertical lifelines for each replica
         for (let r = 0; r < this.NUM_REPLICAS; r++) {
-            html += `
-                <div class="replica-row">
-                    <div class="replica-label">Replica ${r}</div>
-                    <div class="replica-timeline" id="timeline-${r}"></div>
-                </div>
+            const x = replicaSpacing * (r + 1);
+            svg += `
+                <line x1="${x}" y1="30" x2="${x}" y2="${height - 10}" 
+                      stroke="#ddd" stroke-width="2" stroke-dasharray="5,5"/>
+                <text x="${x}" y="20" text-anchor="middle" fill="#667eea" font-weight="bold">R${r}</text>
             `;
         }
-        timelineEl.innerHTML = html;
         
-        // Draw message arrows
+        // Draw messages as actions (dots) and arrows
+        let currentY = 50;
         recentMessages.forEach((msg, idx) => {
-            const opacity = 0.3 + (idx / recentMessages.length) * 0.7; // Fade older messages
-            this.drawMessageArrow(msg, opacity);
+            const fromX = replicaSpacing * (msg.from + 1);
+            const toX = replicaSpacing * (msg.to + 1);
+            const y = currentY + idx * timeStep;
+            
+            // Draw action dot at sender
+            svg += `
+                <circle cx="${fromX}" cy="${y}" r="5" fill="${msg.color}" stroke="#333" stroke-width="1">
+                    <title>${msg.type} sent by Replica ${msg.from} (${msg.commandId})</title>
+                </circle>
+            `;
+            
+            // Draw arrow to receiver if different replica
+            if (msg.from !== msg.to) {
+                const arrowY = y + 10;
+                svg += `
+                    <line x1="${fromX}" y1="${y}" x2="${toX}" y2="${arrowY}" 
+                          stroke="${msg.color}" stroke-width="2" opacity="0.6" marker-end="url(#arrowhead-${idx})"/>
+                    <defs>
+                        <marker id="arrowhead-${idx}" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+                            <polygon points="0 0, 10 3, 0 6" fill="${msg.color}" opacity="0.6"/>
+                        </marker>
+                    </defs>
+                `;
+                
+                // Draw receive dot
+                svg += `
+                    <circle cx="${toX}" cy="${arrowY}" r="4" fill="white" stroke="${msg.color}" stroke-width="2">
+                        <title>${msg.type} received by Replica ${msg.to} (${msg.commandId})</title>
+                    </circle>
+                `;
+            }
+            
+            // Add message type label
+            const labelX = (fromX + toX) / 2;
+            const labelY = y + (msg.from !== msg.to ? 5 : -8);
+            svg += `
+                <text x="${labelX}" y="${labelY}" text-anchor="middle" font-size="10" fill="#666">${msg.type}</text>
+            `;
         });
+        
+        svg += '</svg>';
+        timelineEl.innerHTML = svg;
     }
     
     drawMessageArrow(msg, opacity = 1) {
-        if (msg.from === msg.to) return; // Skip self-messages for clarity
-        
-        const fromTimeline = document.getElementById(`timeline-${msg.from}`);
-        const toTimeline = document.getElementById(`timeline-${msg.to}`);
-        
-        if (!fromTimeline || !toTimeline) return;
-        
-        // Create arrow element
-        const arrow = document.createElement('div');
-        arrow.className = 'message-arrow';
-        arrow.style.borderColor = msg.color;
-        arrow.style.opacity = opacity;
-        arrow.title = `${msg.type} from Replica ${msg.from} to Replica ${msg.to} (${msg.commandId})`;
-        
-        // Position will be managed by CSS positioning relative to parent
-        const msgLabel = document.createElement('div');
-        msgLabel.className = 'message-label';
-        msgLabel.textContent = msg.type.substring(0, 2);
-        msgLabel.style.color = msg.color;
-        
-        fromTimeline.appendChild(arrow);
-        fromTimeline.appendChild(msgLabel);
+        // This method is no longer needed with SVG timeline
+        // Kept for backward compatibility
     }
     
     updateUI() {
@@ -953,6 +1004,9 @@ class EPaxosSimulator {
         
         // Update recovery dropdown
         this.updateRecoveryDropdown();
+        
+        // Update message timeline
+        this.updateMessageTimeline();
         
         // Update each replica's display
         for (let r = 0; r < this.NUM_REPLICAS; r++) {
