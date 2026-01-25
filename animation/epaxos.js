@@ -988,7 +988,7 @@ class EPaxosSimulator {
         
         this.messageTimeline.push(timelineEntry);
         
-        // Keep only last 40 entries (20 send + 20 receive pairs)
+        // Keep timeline size manageable
         if (this.messageTimeline.length > 40) {
             this.messageTimeline.shift();
         }
@@ -1012,7 +1012,7 @@ class EPaxosSimulator {
         
         this.messageTimeline.push(timelineEntry);
         
-        // Keep only last 40 entries
+        // Keep timeline size manageable
         if (this.messageTimeline.length > 40) {
             this.messageTimeline.shift();
         }
@@ -1077,26 +1077,35 @@ class EPaxosSimulator {
                         <title>${msg.type} sent by Replica ${msg.from} (${msg.commandId})</title>
                     </circle>
                 `;
-            } else if (msg.phase === 'received' && msg.from !== msg.to) {
-                // Draw arrow and receive dot (when message is actually delivered)
-                // Only draw if sender != receiver to avoid self-loops
-                svg += `
-                    <line x1="${fromX}" y1="${y}" x2="${toX}" y2="${y}" 
-                          stroke="${msg.color}" stroke-width="2" opacity="0.6" marker-end="url(#arrowhead-${msg.id})"/>
-                `;
-                
-                // Draw receive dot
-                svg += `
-                    <circle cx="${toX}" cy="${y}" r="4" fill="white" stroke="${msg.color}" stroke-width="2">
-                        <title>${msg.type} received by Replica ${msg.to} (${msg.commandId})</title>
-                    </circle>
-                `;
-                
-                // Add message type label
-                const labelX = (fromX + toX) / 2;
-                svg += `
-                    <text x="${labelX}" y="${y - 3}" text-anchor="middle" font-size="10" fill="#666">${msg.type}</text>
-                `;
+            } else if (msg.phase === 'received') {
+                // Draw receive visualization (when message is actually delivered)
+                if (msg.from !== msg.to) {
+                    // For messages to different replicas: draw arrow and receive dot
+                    svg += `
+                        <line x1="${fromX}" y1="${y}" x2="${toX}" y2="${y}" 
+                              stroke="${msg.color}" stroke-width="2" opacity="0.6" marker-end="url(#arrowhead-${msg.id})"/>
+                    `;
+                    
+                    // Draw receive dot
+                    svg += `
+                        <circle cx="${toX}" cy="${y}" r="4" fill="white" stroke="${msg.color}" stroke-width="2">
+                            <title>${msg.type} received by Replica ${msg.to} (${msg.commandId})</title>
+                        </circle>
+                    `;
+                    
+                    // Add message type label
+                    const labelX = (fromX + toX) / 2;
+                    svg += `
+                        <text x="${labelX}" y="${y - 3}" text-anchor="middle" font-size="10" fill="#666">${msg.type}</text>
+                    `;
+                } else {
+                    // For self-messages: just draw a receive dot on sender's lifeline
+                    svg += `
+                        <circle cx="${fromX}" cy="${y}" r="4" fill="white" stroke="${msg.color}" stroke-width="2">
+                            <title>${msg.type} received by Replica ${msg.to} (${msg.commandId})</title>
+                        </circle>
+                    `;
+                }
             }
         });
         
