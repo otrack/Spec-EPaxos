@@ -221,7 +221,7 @@ class EPaxosSimulator {
     }
     
     addMessageWithRandomDelay(msg) {
-        // Add random network delay (0-MAX_MESSAGE_DELAY ms simulation time)
+        // Add random network delay in simulation rounds
         // Each message gets an independent random delay
         // In asynchronous mode, use much wider spread of delays
         let delay;
@@ -231,8 +231,9 @@ class EPaxosSimulator {
             // This ensures different replicas receive messages in different rounds
             delay = Math.random() * 50;
         } else {
-            // Synchronous mode: small randomness within same round
-            delay = Math.random() * this.MAX_MESSAGE_DELAY / 1000; // Convert ms to rounds (0-0.2 rounds)
+            // Synchronous mode: small randomness, messages arrive within ~0.2 rounds
+            // MAX_MESSAGE_DELAY is in ms, divide by 1000 to get fractional rounds
+            delay = Math.random() * 0.2;
         }
         const deliveryTime = this.currentTime + delay;
         
@@ -457,17 +458,16 @@ class EPaxosSimulator {
             return;
         }
         
-        // Advance logical time to next message's delivery time
+        // Process one message
+        const msg = this.messages.shift();
+        
+        // Advance logical time to this message's delivery time
         // This ensures time progresses realistically in the simulation
-        const nextMsg = this.messages[0];
-        if (nextMsg.deliveryTime) {
-            this.currentTime = nextMsg.deliveryTime;
+        if (msg.deliveryTime !== undefined) {
+            this.currentTime = msg.deliveryTime;
         } else {
             this.currentTime += 1;
         }
-        
-        // Process one message
-        const msg = this.messages.shift();
         
         // Skip if recipient is disconnected
         if (!this.isReplicaConnected(msg.to)) {
