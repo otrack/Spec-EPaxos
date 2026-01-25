@@ -582,17 +582,22 @@ class EPaxosSimulator {
             return;
         }
         
-        // Count PreAcceptOK messages for this command (including current message)
-        // Current message has already been removed from queue by step()
-        const okMsgs = this.messages.filter(m => 
-            m.type === 'PreAcceptOK' && m.to === r && m.commandId === id
-        );
+        // Put the message back in the queue temporarily for quorum counting
+        // (it was removed by step() before this handler was called)
+        this.messages.push(msg);
         
-        // Add current message to count
-        okMsgs.push(msg);
+        // Count unique replicas that have sent PreAcceptOK for this command
+        const okSenders = new Set();
+        const okMsgs = [];
+        for (const m of this.messages) {
+            if (m.type === 'PreAcceptOK' && m.to === r && m.commandId === id) {
+                okSenders.add(m.from);
+                okMsgs.push(m);
+            }
+        }
         
         // Check if we have a quorum
-        if (okMsgs.length >= this.QUORUM_SIZE) {
+        if (okSenders.size >= this.QUORUM_SIZE) {
             // Union all dependencies
             const allDeps = new Set();
             for (const m of okMsgs) {
@@ -605,10 +610,10 @@ class EPaxosSimulator {
             
             // Check for fast path (fast quorum + all same deps as initial)
             const initialDeps = this.initDep[r] && this.initDep[r][id] ? this.initDep[r][id] : new Set();
-            const canFastCommit = okMsgs.length >= this.FAST_QUORUM_SIZE &&
+            const canFastCommit = okSenders.size >= this.FAST_QUORUM_SIZE &&
                 okMsgs.every(m => this.setsEqual(m.dep, initialDeps));
             
-            // Remove processed PreAcceptOK messages from queue
+            // Remove all processed PreAcceptOK messages from queue
             this.messages = this.messages.filter(m => 
                 !(m.type === 'PreAcceptOK' && m.to === r && m.commandId === id)
             );
@@ -650,6 +655,9 @@ class EPaxosSimulator {
                 }
                 this.addToHistory(`Replica ${r} taking slow path for ${id}`, id);
             }
+        } else {
+            // Not enough responses yet, remove the message we temporarily added
+            this.messages = this.messages.filter(m => m !== msg);
         }
     }
     
