@@ -8,6 +8,7 @@ class EPaxosSimulator {
         this.FAST_QUORUM_SIZE = 4; // N - E where E=1
         this.MAX_MESSAGE_DELAY = 200; // Maximum random network delay in ms
         this.MAX_VISIBLE_HISTORY_ENTRIES = 15; // Number of history entries to display
+        this.asynchronousMode = false; // When true, extreme message delivery randomness
         
         // Protocol state (similar to TLA+ variables)
         this.bal = {}; // ballot number per replica per command
@@ -125,6 +126,15 @@ class EPaxosSimulator {
             recoveryBtn.addEventListener('click', () => this.startRecovery());
         }
         
+        // Asynchronous mode checkbox
+        const asyncCheckbox = document.getElementById('async-mode-checkbox');
+        if (asyncCheckbox) {
+            asyncCheckbox.addEventListener('change', (e) => {
+                this.asynchronousMode = e.target.checked;
+                this.addToHistory(`Asynchronous mode ${this.asynchronousMode ? 'enabled' : 'disabled'}`, 'system');
+            });
+        }
+        
         const speedSlider = document.getElementById('speed-slider');
         speedSlider.addEventListener('input', (e) => {
             this.speed = parseInt(e.target.value);
@@ -213,7 +223,16 @@ class EPaxosSimulator {
     addMessageWithRandomDelay(msg) {
         // Add random network delay (0-MAX_MESSAGE_DELAY ms simulation time)
         // Each message gets an independent random delay
-        const delay = Math.random() * this.MAX_MESSAGE_DELAY;
+        // In asynchronous mode, use much wider spread of delays
+        let delay;
+        if (this.asynchronousMode) {
+            // Asynchronous mode: messages can arrive over many rounds
+            // Random delay between 0 and 5x MAX_MESSAGE_DELAY
+            delay = Math.random() * (this.MAX_MESSAGE_DELAY * 5);
+        } else {
+            // Synchronous mode: normal randomness
+            delay = Math.random() * this.MAX_MESSAGE_DELAY;
+        }
         const deliveryTime = this.currentTime + delay;
         
         // Deep clone the message to avoid mutation issues
