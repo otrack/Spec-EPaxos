@@ -7,7 +7,7 @@ class EPaxosSimulator {
         this.QUORUM_SIZE = 3; // N - F where N=5, F=2
         this.FAST_QUORUM_SIZE = 4; // N - E where E=1
         this.MAX_MESSAGE_DELAY = 200; // Maximum random network delay in ms
-        self.MAX_VISIBLE_HISTORY_ENTRIES = 15; // Number of history entries to display
+        this.MAX_VISIBLE_HISTORY_ENTRIES = 15; // Number of history entries to display
         
         // Protocol state (similar to TLA+ variables)
         this.bal = {}; // ballot number per replica per command
@@ -136,11 +136,38 @@ class EPaxosSimulator {
         });
     }
     
-    addToHistory(message, commandId = null) {
+    addToHistory(message, commandId = null, msgDetails = null) {
         const timestamp = new Date().toLocaleTimeString();
         const color = commandId && commandId !== 'system' ? this.getCommandColor(commandId) : '#666';
-        this.executionHistory.push({ timestamp, message, commandId, color });
+        
+        // If message details provided, format them
+        let fullMessage = message;
+        if (msgDetails) {
+            const details = this.formatMessageDetails(msgDetails);
+            fullMessage = `${message} ${details}`;
+        }
+        
+        this.executionHistory.push({ timestamp, message: fullMessage, commandId, color });
         this.updateHistoryDisplay();
+    }
+    
+    formatMessageDetails(msg) {
+        if (!msg) return '';
+        
+        const parts = [];
+        parts.push(`{type: ${msg.type}`);
+        if (msg.from !== undefined) parts.push(`from: R${msg.from}`);
+        if (msg.to !== undefined) parts.push(`to: R${msg.to}`);
+        if (msg.cmd) parts.push(`cmd: "${msg.cmd}"`);
+        if (msg.bal !== undefined) parts.push(`bal: ${msg.bal}`);
+        if (msg.abal !== undefined) parts.push(`abal: ${msg.abal}`);
+        if (msg.dep) {
+            const depStr = msg.dep instanceof Set ? Array.from(msg.dep).join(',') : msg.dep;
+            parts.push(`dep: [${depStr || 'none'}]`);
+        }
+        parts.push('}');
+        
+        return parts.join(', ');
     }
     
     getCommandColor(commandId) {
@@ -189,9 +216,13 @@ class EPaxosSimulator {
         const delay = Math.random() * this.MAX_MESSAGE_DELAY;
         const deliveryTime = this.currentTime + delay;
         
-        // Clone the message to avoid mutation issues
-        const msgWithDelay = Object.assign({}, msg);
-        msgWithDelay.deliveryTime = deliveryTime;
+        // Deep clone the message to avoid mutation issues
+        // Need to handle Set objects specially
+        const msgWithDelay = {
+            ...msg,
+            dep: msg.dep ? new Set(msg.dep) : undefined,
+            deliveryTime: deliveryTime
+        };
         this.messages.push(msgWithDelay);
         
         // Sort messages by delivery time to simulate network randomization
@@ -356,15 +387,17 @@ class EPaxosSimulator {
         const initialDeps = this.getConflictingIds(replicaId, commandName);
         
         // Send PreAccept messages to all replicas with random delays
+        // Each message gets a separate copy with independent delay
         for (let r = 0; r < this.NUM_REPLICAS; r++) {
             if (this.isReplicaConnected(r)) {
+                // Create a fresh message object for each recipient
                 const msg = {
                     type: 'PreAccept',
                     from: replicaId,
                     to: r,
                     commandId: commandId,
                     cmd: commandName,
-                    dep: new Set(initialDeps),
+                    dep: new Set(initialDeps), // Fresh copy of deps for this message
                     bal: 0
                 };
                 this.addMessageWithRandomDelay(msg);
@@ -483,7 +516,7 @@ class EPaxosSimulator {
         const r = msg.to;
         const id = msg.commandId;
         
-        this.addToHistory(`Replica ${r} received PreAccept for ${id} from Replica ${msg.from}`, id);
+        this.addToHistory(`Replica ${r} received PreAccept for ${id} from Replica ${msg.from}`, id, msg);
         
         // Initialize if needed
         if (!this.phase[r][id] || this.phase[r][id] === 'Initial') {
@@ -523,7 +556,7 @@ class EPaxosSimulator {
         const r = msg.to;
         const id = msg.commandId;
         
-        this.addToHistory(`Replica ${r} received PreAcceptOK for ${id} from Replica ${msg.from} [bal=${msg.bal}]`, id);
+        this.addToHistory(`Replica ${r} received PreAcceptOK for ${id} from Replica ${msg.from} [bal=${msg.bal}]`, id, msg);
         
         // Check if we're the coordinator and in preaccepted phase
         if (this.phase[r][id] !== 'preaccepted' || this.initCoord[id] !== r) {
@@ -604,7 +637,7 @@ class EPaxosSimulator {
         const r = msg.to;
         const id = msg.commandId;
         
-        this.addToHistory(`Replica ${r} received Accept for ${id} from Replica ${msg.from}`, id);
+        this.addToHistory(`Replica ${r} received Accept for ${id} from Replica ${msg.from}`, id, msg);
         
         if (!this.bal[r][id] || this.bal[r][id] <= msg.bal) {
             this.bal[r][id] = msg.bal;
@@ -640,7 +673,7 @@ class EPaxosSimulator {
         const r = msg.to;
         const id = msg.commandId;
         
-        this.addToHistory(`Replica ${r} received AcceptOK for ${id} from Replica ${msg.from}`, id);
+        this.addToHistory(`Replica ${r} received AcceptOK for ${id} from Replica ${msg.from}`, id, msg);
         
         if (this.phase[r][id] !== 'accepted') {
             return;
@@ -687,7 +720,7 @@ class EPaxosSimulator {
         const r = msg.to;
         const id = msg.commandId;
         
-        this.addToHistory(`Replica ${r} received Commit for ${id} [bal=${msg.bal}]`, id);
+        this.addToHistory(`Replica ${r} received Commit for ${id} [bal=${msg.bal}]`, id, msg);
         
         this.cmd[r][id] = msg.cmd;
         
@@ -711,7 +744,7 @@ class EPaxosSimulator {
         const id = msg.commandId;
         const b = msg.bal;
         
-        this.addToHistory(`Replica ${r} received Recover for ${id} from Replica ${msg.from}`, id);
+        this.addToHistory(`Replica ${r} received Recover for ${id} from Replica ${msg.from}`, id, msg);
         
         if (!this.bal[r][id] || this.bal[r][id] < b) {
             this.bal[r][id] = b;
@@ -747,7 +780,7 @@ class EPaxosSimulator {
         const id = msg.commandId;
         const b = msg.bal;
         
-        this.addToHistory(`Replica ${r} received RecoverOK for ${id} from Replica ${msg.from}`, id);
+        this.addToHistory(`Replica ${r} received RecoverOK for ${id} from Replica ${msg.from}`, id, msg);
         
         if (this.bal[r][id] !== b) {
             return;
