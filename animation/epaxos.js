@@ -582,23 +582,24 @@ class EPaxosSimulator {
             return;
         }
         
-        // Count PreAcceptOK messages for this command
+        // Count PreAcceptOK messages for this command (including current message)
+        // Current message has already been removed from queue by step()
         const okMsgs = this.messages.filter(m => 
             m.type === 'PreAcceptOK' && m.to === r && m.commandId === id
         );
         
-        // Verify current message matches criteria before adding
-        if (msg.type === 'PreAcceptOK' && msg.to === r && msg.commandId === id) {
-            okMsgs.push(msg);
-        }
+        // Add current message to count
+        okMsgs.push(msg);
         
         // Check if we have a quorum
         if (okMsgs.length >= this.QUORUM_SIZE) {
             // Union all dependencies
             const allDeps = new Set();
             for (const m of okMsgs) {
-                for (const dep of m.dep) {
-                    allDeps.add(dep);
+                if (m.dep) {
+                    for (const dep of m.dep) {
+                        allDeps.add(dep);
+                    }
                 }
             }
             
@@ -607,7 +608,7 @@ class EPaxosSimulator {
             const canFastCommit = okMsgs.length >= this.FAST_QUORUM_SIZE &&
                 okMsgs.every(m => this.setsEqual(m.dep, initialDeps));
             
-            // Remove processed PreAcceptOK messages
+            // Remove processed PreAcceptOK messages from queue
             this.messages = this.messages.filter(m => 
                 !(m.type === 'PreAcceptOK' && m.to === r && m.commandId === id)
             );
