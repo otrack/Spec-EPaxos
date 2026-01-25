@@ -40,6 +40,10 @@ class EPaxosSimulator {
         // Execution history
         this.executionHistory = [];
         
+        // Message timeline tracking
+        this.messageTimeline = [];
+        this.timelineAnimationId = 0;
+        
         // Animation state
         this.isPlaying = false;
         this.speed = 1500;
@@ -51,6 +55,9 @@ class EPaxosSimulator {
         
         // Active message animations
         this.activeMessageAnimations = [];
+        
+        // Tooltip element
+        this.tooltip = null;
         
         this.init();
         this.setupEventListeners();
@@ -185,10 +192,12 @@ class EPaxosSimulator {
         this.messages.sort((a, b) => (a.deliveryTime || 0) - (b.deliveryTime || 0));
     }
     
-    startRecovery() {
-        // Start recovery for a random command that hasn't been committed on all replicas
-        const candidates = [];
+    updateRecoveryDropdown() {
+        const dropdown = document.getElementById('recovery-command-select');
+        if (!dropdown) return;
         
+        // Find commands that need recovery
+        const candidates = [];
         for (const cmdId of this.submitted) {
             let needsRecovery = false;
             for (let r = 0; r < this.NUM_REPLICAS; r++) {
@@ -198,26 +207,47 @@ class EPaxosSimulator {
                 }
             }
             if (needsRecovery) {
-                candidates.push(cmdId);
+                const cmdName = this.cmd[this.initCoord[cmdId]][cmdId] || cmdId;
+                candidates.push({ id: cmdId, name: cmdName });
             }
         }
         
-        if (candidates.length === 0) {
-            this.addToHistory('No commands need recovery', 'system');
+        // Update dropdown
+        dropdown.innerHTML = '<option value="">-- Select command --</option>';
+        for (const candidate of candidates) {
+            const option = document.createElement('option');
+            option.value = candidate.id;
+            option.textContent = `${candidate.name} (${candidate.id})`;
+            dropdown.appendChild(option);
+        }
+    }
+    
+    startRecovery() {
+        const dropdown = document.getElementById('recovery-command-select');
+        const selectedCmdId = dropdown ? dropdown.value : '';
+        
+        if (!selectedCmdId) {
+            alert('Please select a command to recover');
             return;
         }
         
-        // Pick a random command and replica to start recovery
-        const cmdId = candidates[Math.floor(Math.random() * candidates.length)];
-        const replicaId = Math.floor(Math.random() * this.NUM_REPLICAS);
+        // Pick a random connected replica to start recovery
+        const connectedReplicas = [];
+        for (let r = 0; r < this.NUM_REPLICAS; r++) {
+            if (this.isReplicaConnected(r)) {
+                connectedReplicas.push(r);
+            }
+        }
         
-        if (!this.isReplicaConnected(replicaId)) {
-            this.addToHistory(`Cannot start recovery on disconnected Replica ${replicaId}`, 'system');
+        if (connectedReplicas.length === 0) {
+            this.addToHistory('No connected replicas available for recovery', 'system');
             return;
         }
         
-        this.addToHistory(`Replica ${replicaId} starting recovery for ${cmdId}`, cmdId);
-        this.initiateRecovery(replicaId, cmdId);
+        const replicaId = connectedReplicas[Math.floor(Math.random() * connectedReplicas.length)];
+        
+        this.addToHistory(`Replica ${replicaId} starting recovery for ${selectedCmdId}`, selectedCmdId);
+        this.initiateRecovery(replicaId, selectedCmdId);
     }
     
     initiateRecovery(replicaId, commandId) {
@@ -320,7 +350,7 @@ class EPaxosSimulator {
         // Send PreAccept messages to all replicas with random delays
         for (let r = 0; r < this.NUM_REPLICAS; r++) {
             if (this.isReplicaConnected(r)) {
-                this.addMessageWithRandomDelay({
+                const msg = {
                     type: 'PreAccept',
                     from: replicaId,
                     to: r,
@@ -328,7 +358,9 @@ class EPaxosSimulator {
                     cmd: commandName,
                     dep: new Set(initialDeps),
                     bal: 0
-                });
+                };
+                this.addMessageWithRandomDelay(msg);
+                this.trackMessageTimeline(msg);
             }
         }
     }
@@ -463,16 +495,18 @@ class EPaxosSimulator {
             this.abal[r][id] = 0;
             
             // Send PreAcceptOK back to coordinator with random delay
-            this.addMessageWithRandomDelay({
+            const okMsg = {
                 type: 'PreAcceptOK',
                 from: r,
                 to: msg.from,
                 commandId: id,
                 dep: finalDeps,
                 bal: msg.bal
-            });
+            };
+            this.addMessageWithRandomDelay(okMsg);
+            this.trackMessageTimeline(okMsg);
             
-            this.addToHistory(`Replica ${r} pre-accepted ${msg.cmd} (${id}) with deps: ${Array.from(finalDeps).join(', ') || 'none'}`, id);
+            this.addToHistory(`Replica ${r} pre-accepted ${msg.cmd} (${id}) [bal=${msg.bal}] with deps: ${Array.from(finalDeps).join(', ') || 'none'}`, id);
         }
     }
     
@@ -480,7 +514,7 @@ class EPaxosSimulator {
         const r = msg.to;
         const id = msg.commandId;
         
-        this.addToHistory(`Replica ${r} received PreAcceptOK for ${id} from Replica ${msg.from}`, id);
+        this.addToHistory(`Replica ${r} received PreAcceptOK for ${id} from Replica ${msg.from} [bal=${msg.bal}]`, id);
         
         // Check if we're the coordinator and in preaccepted phase
         if (this.phase[r][id] !== 'preaccepted' || this.initCoord[id] !== r) {
@@ -836,9 +870,89 @@ class EPaxosSimulator {
         return preacceptedCount >= this.NUM_REPLICAS - this.FAST_QUORUM_SIZE + okMsgCount;
     }
     
+    trackMessageTimeline(msg) {
+        // Track message for timeline visualization
+        const timelineEntry = {
+            id: this.timelineAnimationId++,
+            type: msg.type,
+            from: msg.from,
+            to: msg.to,
+            commandId: msg.commandId,
+            timestamp: Date.now(),
+            color: this.getCommandColor(msg.commandId || 'system')
+        };
+        
+        this.messageTimeline.push(timelineEntry);
+        
+        // Keep only last 20 messages for performance
+        if (this.messageTimeline.length > 20) {
+            this.messageTimeline.shift();
+        }
+        
+        this.updateMessageTimeline();
+    }
+    
+    updateMessageTimeline() {
+        const timelineEl = document.getElementById('message-timeline');
+        if (!timelineEl) return;
+        
+        // Show recent messages
+        const recentMessages = this.messageTimeline.slice(-10);
+        
+        if (recentMessages.length === 0) {
+            timelineEl.innerHTML = '<div style="text-align: center; color: #999; padding: 20px;">No messages yet</div>';
+            return;
+        }
+        
+        let html = '';
+        for (let r = 0; r < this.NUM_REPLICAS; r++) {
+            html += `
+                <div class="replica-row">
+                    <div class="replica-label">Replica ${r}</div>
+                    <div class="replica-timeline" id="timeline-${r}"></div>
+                </div>
+            `;
+        }
+        timelineEl.innerHTML = html;
+        
+        // Draw message arrows
+        recentMessages.forEach((msg, idx) => {
+            const opacity = 0.3 + (idx / recentMessages.length) * 0.7; // Fade older messages
+            this.drawMessageArrow(msg, opacity);
+        });
+    }
+    
+    drawMessageArrow(msg, opacity = 1) {
+        if (msg.from === msg.to) return; // Skip self-messages for clarity
+        
+        const fromTimeline = document.getElementById(`timeline-${msg.from}`);
+        const toTimeline = document.getElementById(`timeline-${msg.to}`);
+        
+        if (!fromTimeline || !toTimeline) return;
+        
+        // Create arrow element
+        const arrow = document.createElement('div');
+        arrow.className = 'message-arrow';
+        arrow.style.borderColor = msg.color;
+        arrow.style.opacity = opacity;
+        arrow.title = `${msg.type} from Replica ${msg.from} to Replica ${msg.to} (${msg.commandId})`;
+        
+        // Position will be managed by CSS positioning relative to parent
+        const msgLabel = document.createElement('div');
+        msgLabel.className = 'message-label';
+        msgLabel.textContent = msg.type.substring(0, 2);
+        msgLabel.style.color = msg.color;
+        
+        fromTimeline.appendChild(arrow);
+        fromTimeline.appendChild(msgLabel);
+    }
+    
     updateUI() {
         // Update message queue count
         document.getElementById('queue-count').textContent = this.messages.length;
+        
+        // Update recovery dropdown
+        this.updateRecoveryDropdown();
         
         // Update each replica's display
         for (let r = 0; r < this.NUM_REPLICAS; r++) {
@@ -972,7 +1086,42 @@ class EPaxosSimulator {
             }
         });
         
-        // Draw nodes
+        // Draw nodes with hover support
+        const self = this;
+        
+        // Remove old event listener if exists
+        canvas.onmousemove = null;
+        canvas.onmouseout = null;
+        
+        // Add mouse move handler for tooltips
+        canvas.onmousemove = function(e) {
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            
+            let hoveredCmd = null;
+            for (const cmdId of commands) {
+                const pos = positions[cmdId];
+                const dist = Math.sqrt(Math.pow(x - pos.x, 2) + Math.pow(y - pos.y, 2));
+                if (dist < 15) {
+                    hoveredCmd = cmdId;
+                    break;
+                }
+            }
+            
+            if (hoveredCmd) {
+                self.showCommandTooltip(replicaId, hoveredCmd, e.clientX, e.clientY);
+                canvas.style.cursor = 'pointer';
+            } else {
+                self.hideCommandTooltip();
+                canvas.style.cursor = 'default';
+            }
+        };
+        
+        canvas.onmouseout = function() {
+            self.hideCommandTooltip();
+        };
+        
         commands.forEach(cmdId => {
             const pos = positions[cmdId];
             const phase = this.phase[replicaId][cmdId];
@@ -1010,6 +1159,49 @@ class EPaxosSimulator {
             ctx.textBaseline = 'middle';
             ctx.fillText(cmd || cmdId, pos.x, pos.y);
         });
+    }
+    
+    showCommandTooltip(replicaId, cmdId, x, y) {
+        // Remove existing tooltip
+        this.hideCommandTooltip();
+        
+        // Create tooltip
+        const tooltip = document.createElement('div');
+        tooltip.className = 'command-tooltip';
+        tooltip.id = 'command-tooltip';
+        
+        // Get command state
+        const phase = this.phase[replicaId][cmdId] || 'Initial';
+        const cmd = this.cmd[replicaId][cmdId] || 'N/A';
+        const initCmd = this.initCmd && this.initCmd[replicaId] && this.initCmd[replicaId][cmdId] || 'N/A';
+        const bal = this.bal[replicaId] && this.bal[replicaId][cmdId] !== undefined ? this.bal[replicaId][cmdId] : 'N/A';
+        const abal = this.abal[replicaId] && this.abal[replicaId][cmdId] !== undefined ? this.abal[replicaId][cmdId] : 'N/A';
+        const dep = this.dep[replicaId][cmdId] ? Array.from(this.dep[replicaId][cmdId]).join(', ') || 'none' : 'none';
+        const initDep = this.initDep[replicaId] && this.initDep[replicaId][cmdId] ? Array.from(this.initDep[replicaId][cmdId]).join(', ') || 'none' : 'none';
+        
+        tooltip.innerHTML = `
+            <div class="tooltip-row"><span class="tooltip-label">Command ID:</span> ${cmdId}</div>
+            <div class="tooltip-row"><span class="tooltip-label">phase[${cmdId}]:</span> ${phase}</div>
+            <div class="tooltip-row"><span class="tooltip-label">cmd[${cmdId}]:</span> ${cmd}</div>
+            <div class="tooltip-row"><span class="tooltip-label">initCmd[${cmdId}]:</span> ${initCmd}</div>
+            <div class="tooltip-row"><span class="tooltip-label">bal[${cmdId}]:</span> ${bal}</div>
+            <div class="tooltip-row"><span class="tooltip-label">abal[${cmdId}]:</span> ${abal}</div>
+            <div class="tooltip-row"><span class="tooltip-label">dep[${cmdId}]:</span> ${dep}</div>
+            <div class="tooltip-row"><span class="tooltip-label">initDep[${cmdId}]:</span> ${initDep}</div>
+        `;
+        
+        tooltip.style.left = (x + 10) + 'px';
+        tooltip.style.top = (y + 10) + 'px';
+        
+        document.body.appendChild(tooltip);
+        this.tooltip = tooltip;
+    }
+    
+    hideCommandTooltip() {
+        if (this.tooltip) {
+            this.tooltip.remove();
+            this.tooltip = null;
+        }
     }
 }
 
