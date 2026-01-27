@@ -588,9 +588,7 @@ class EPaxosSimulator {
         const r = msg.to;
         const id = msg.commandId;
         
-        // Track TLA+ HandlePreAcceptOK action
-        this.trackAction('HandlePreAcceptOK', r, { commandId: id, ballot: msg.bal });
-        
+        // Log message receipt but don't track action yet
         this.addToHistory(`Replica ${r} received PreAcceptOK for ${id} from Replica ${msg.from} [bal=${msg.bal}]`, id, msg);
         
         // Check if we're the coordinator and in preaccepted phase
@@ -614,6 +612,9 @@ class EPaxosSimulator {
         
         // Check if we have a quorum
         if (okSenders.size >= this.QUORUM_SIZE) {
+            // ONLY NOW track the HandlePreAcceptOK TLA+ action (happens once per quorum)
+            this.trackAction('HandlePreAcceptOK', r, { commandId: id, ballot: msg.bal });
+            
             // Union all dependencies
             const allDeps = new Set();
             for (const m of okMsgs) {
@@ -629,7 +630,7 @@ class EPaxosSimulator {
             const canFastCommit = okSenders.size >= this.FAST_QUORUM_SIZE &&
                 okMsgs.every(m => this.setsEqual(m.dep, initialDeps));
             
-            // Remove all processed PreAcceptOK messages from queue
+            // Remove all processed PreAcceptOK messages from queue (per TLA+ spec)
             this.messages = this.messages.filter(m => 
                 !(m.type === 'PreAcceptOK' && m.to === r && m.commandId === id)
             );
@@ -729,9 +730,7 @@ class EPaxosSimulator {
         const r = msg.to;
         const id = msg.commandId;
         
-        // Track TLA+ HandleAcceptOK action
-        this.trackAction('HandleAcceptOK', r, { commandId: id, ballot: msg.bal });
-        
+        // Log message receipt but don't track action yet
         this.addToHistory(`Replica ${r} received AcceptOK for ${id} from Replica ${msg.from}`, id, msg);
         
         if (this.phase[r][id] !== 'accepted') {
@@ -749,7 +748,10 @@ class EPaxosSimulator {
         }
         
         if (okMsgs.length >= this.QUORUM_SIZE) {
-            // Remove processed AcceptOK messages
+            // ONLY NOW track the HandleAcceptOK TLA+ action (happens once per quorum)
+            this.trackAction('HandleAcceptOK', r, { commandId: id, ballot: msg.bal });
+            
+            // Remove processed AcceptOK messages (per TLA+ spec)
             this.messages = this.messages.filter(m => 
                 !(m.type === 'AcceptOK' && m.to === r && m.commandId === id)
             );
@@ -851,9 +853,7 @@ class EPaxosSimulator {
         const id = msg.commandId;
         const b = msg.bal;
         
-        // Track TLA+ HandleRecoverOK action
-        this.trackAction('HandleRecoverOK', r, { commandId: id, ballot: b });
-        
+        // Log message receipt but don't track action yet
         this.addToHistory(`Replica ${r} received RecoverOK for ${id} from Replica ${msg.from}`, id, msg);
         
         if (this.bal[r][id] !== b) {
@@ -870,7 +870,10 @@ class EPaxosSimulator {
         }
         
         if (okMsgs.length >= this.QUORUM_SIZE) {
-            // Remove processed RecoverOK messages
+            // ONLY NOW track the HandleRecoverOK TLA+ action (happens once per quorum)
+            this.trackAction('HandleRecoverOK', r, { commandId: id, ballot: b });
+            
+            // Remove processed RecoverOK messages (per TLA+ spec)
             this.messages = this.messages.filter(m => 
                 !(m.type === 'RecoverOK' && m.to === r && m.commandId === id && m.bal === b)
             );
