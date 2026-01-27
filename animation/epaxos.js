@@ -42,8 +42,8 @@ class EPaxosSimulator {
         // Execution history
         this.executionHistory = [];
         
-        // Message timeline tracking
-        this.messageTimeline = [];
+        // Action timeline tracking (TLA+ actions)
+        this.actionTimeline = [];
         this.timelineAnimationId = 0;
         
         // Animation state
@@ -329,6 +329,9 @@ class EPaxosSimulator {
         
         this.bal[replicaId][commandId] = newBal;
         
+        // Track TLA+ StartRecover action
+        this.trackAction('StartRecover', replicaId, { commandId: commandId, ballot: newBal });
+        
         // Send Recover messages to all replicas
         for (let r = 0; r < this.NUM_REPLICAS; r++) {
             if (this.isReplicaConnected(r)) {
@@ -340,10 +343,6 @@ class EPaxosSimulator {
                     bal: newBal
                 };
                 this.addMessageWithRandomDelay(recoverMsg);
-                // Only track inter-replica messages in timeline (not self-messages)
-                if (replicaId !== r) {
-                    this.trackMessageTimeline(recoverMsg);
-                }
             }
         }
         
@@ -407,6 +406,9 @@ class EPaxosSimulator {
         this.submitted.add(commandId);
         this.initCoord[commandId] = replicaId;
         
+        // Track TLA+ Submit action
+        this.trackAction('Submit', replicaId, { commandId: commandId, command: commandName });
+        
         // Calculate initial dependencies (conflicting commands)
         const initialDeps = this.getConflictingIds(replicaId, commandName);
         
@@ -425,10 +427,6 @@ class EPaxosSimulator {
                     bal: 0
                 };
                 this.addMessageWithRandomDelay(msg);
-                // Only track inter-replica messages in timeline (not self-messages)
-                if (replicaId !== r) {
-                    this.trackMessageTimeline(msg);
-                }
             }
         }
     }
@@ -481,9 +479,6 @@ class EPaxosSimulator {
             this.updateUI();
             return;
         }
-        
-        // Track message reception in timeline (receive dot on recipient's lifeline)
-        this.trackMessageReception(msg);
         
         this.processMessage(msg);
         this.updateUI();
@@ -551,6 +546,9 @@ class EPaxosSimulator {
         const r = msg.to;
         const id = msg.commandId;
         
+        // Track TLA+ HandlePreAccept action
+        this.trackAction('HandlePreAccept', r, { commandId: id, ballot: msg.bal });
+        
         this.addToHistory(`Replica ${r} received PreAccept for ${id} from Replica ${msg.from}`, id, msg);
         
         // Initialize if needed
@@ -581,10 +579,6 @@ class EPaxosSimulator {
                 bal: msg.bal
             };
             this.addMessageWithRandomDelay(okMsg);
-            // Only track inter-replica messages in timeline (not self-messages)
-            if (r !== msg.from) {
-                this.trackMessageTimeline(okMsg);
-            }
             
             this.addToHistory(`Replica ${r} pre-accepted ${msg.cmd} (${id}) [bal=${msg.bal}] with deps: ${Array.from(finalDeps).join(', ') || 'none'}`, id);
         }
@@ -593,6 +587,9 @@ class EPaxosSimulator {
     handlePreAcceptOK(msg) {
         const r = msg.to;
         const id = msg.commandId;
+        
+        // Track TLA+ HandlePreAcceptOK action
+        this.trackAction('HandlePreAcceptOK', r, { commandId: id, ballot: msg.bal });
         
         this.addToHistory(`Replica ${r} received PreAcceptOK for ${id} from Replica ${msg.from} [bal=${msg.bal}]`, id, msg);
         
@@ -653,7 +650,7 @@ class EPaxosSimulator {
                         this.addMessageWithRandomDelay(commitMsg);
                         // Only track inter-replica messages in timeline (not self-messages)
                         if (r !== replica) {
-                            this.trackMessageTimeline(commitMsg);
+                            
                         }
                     }
                 }
@@ -674,7 +671,7 @@ class EPaxosSimulator {
                         this.addMessageWithRandomDelay(acceptMsg);
                         // Only track inter-replica messages in timeline (not self-messages)
                         if (r !== replica) {
-                            this.trackMessageTimeline(acceptMsg);
+                            
                         }
                     }
                 }
@@ -689,6 +686,9 @@ class EPaxosSimulator {
     handleAccept(msg) {
         const r = msg.to;
         const id = msg.commandId;
+        
+        // Track TLA+ HandleAccept action
+        this.trackAction('HandleAccept', r, { commandId: id, ballot: msg.bal });
         
         this.addToHistory(`Replica ${r} received Accept for ${id} from Replica ${msg.from}`, id, msg);
         
@@ -718,7 +718,7 @@ class EPaxosSimulator {
             this.addMessageWithRandomDelay(okMsg);
             // Only track inter-replica messages in timeline (not self-messages)
             if (r !== msg.from) {
-                this.trackMessageTimeline(okMsg);
+                
             }
             
             this.addToHistory(`Replica ${r} accepted ${msg.cmd} (${id}) [bal=${msg.bal}]`, id);
@@ -728,6 +728,9 @@ class EPaxosSimulator {
     handleAcceptOK(msg) {
         const r = msg.to;
         const id = msg.commandId;
+        
+        // Track TLA+ HandleAcceptOK action
+        this.trackAction('HandleAcceptOK', r, { commandId: id, ballot: msg.bal });
         
         this.addToHistory(`Replica ${r} received AcceptOK for ${id} from Replica ${msg.from}`, id, msg);
         
@@ -766,7 +769,7 @@ class EPaxosSimulator {
                     this.addMessageWithRandomDelay(commitMsg);
                     // Only track inter-replica messages in timeline (not self-messages)
                     if (r !== replica) {
-                        this.trackMessageTimeline(commitMsg);
+                        
                     }
                 }
             }
@@ -778,6 +781,9 @@ class EPaxosSimulator {
     handleCommit(msg) {
         const r = msg.to;
         const id = msg.commandId;
+        
+        // Track TLA+ HandleCommit action
+        this.trackAction('HandleCommit', r, { commandId: id, ballot: msg.bal });
         
         this.addToHistory(`Replica ${r} received Commit for ${id} [bal=${msg.bal}]`, id, msg);
         
@@ -802,6 +808,9 @@ class EPaxosSimulator {
         const r = msg.to;
         const id = msg.commandId;
         const b = msg.bal;
+        
+        // Track TLA+ HandleRecover action
+        this.trackAction('HandleRecover', r, { commandId: id, ballot: b });
         
         this.addToHistory(`Replica ${r} received Recover for ${id} from Replica ${msg.from}`, id, msg);
         
@@ -830,7 +839,7 @@ class EPaxosSimulator {
             this.addMessageWithRandomDelay(recoverOKMsg);
             // Only track inter-replica messages in timeline (not self-messages)
             if (r !== msg.from) {
-                this.trackMessageTimeline(recoverOKMsg);
+                
             }
             
             this.addToHistory(`Replica ${r} sent RecoverOK for ${id} [bal=${b}]`, id);
@@ -841,6 +850,9 @@ class EPaxosSimulator {
         const r = msg.to;
         const id = msg.commandId;
         const b = msg.bal;
+        
+        // Track TLA+ HandleRecoverOK action
+        this.trackAction('HandleRecoverOK', r, { commandId: id, ballot: b });
         
         this.addToHistory(`Replica ${r} received RecoverOK for ${id} from Replica ${msg.from}`, id, msg);
         
@@ -996,86 +1008,56 @@ class EPaxosSimulator {
         return preacceptedCount >= this.NUM_REPLICAS - this.FAST_QUORUM_SIZE + okMsgCount;
     }
     
-    trackMessageTimeline(msg) {
-        // Track message SEND for timeline visualization (action dot on sender)
-        // Only call this when message is initially sent
+    trackAction(action, replicaId, params = {}) {
+        // Track TLA+ action execution for timeline visualization
         const timelineEntry = {
             id: this.timelineAnimationId++,
-            type: msg.type,
-            from: msg.from,
-            to: msg.to,
-            commandId: msg.commandId,
+            action: action, // TLA+ action name (e.g., "Submit", "HandlePreAccept", etc.)
+            replica: replicaId,
             timestamp: this.currentTime,
-            color: this.getCommandColor(msg.commandId || 'system'),
-            phase: 'sent' // Mark as sent
+            params: params, // Action parameters (e.g., commandId, ballot, etc.)
+            color: params.commandId ? this.getCommandColor(params.commandId) : '#999'
         };
         
-        this.messageTimeline.push(timelineEntry);
+        this.actionTimeline.push(timelineEntry);
         
         // Keep timeline size manageable
-        if (this.messageTimeline.length > 40) {
-            this.messageTimeline.shift();
+        if (this.actionTimeline.length > 60) {
+            this.actionTimeline.shift();
         }
         
         this.updateMessageTimeline();
     }
     
+    trackMessageTimeline(msg) {
+        // DEPRECATED: This method is no longer used
+        // Timeline now tracks TLA+ actions, not individual messages
+    }
+    
     trackMessageReception(msg) {
-        // Track message RECEPTION for timeline visualization (receive dot on recipient)
-        // Only call this when message is actually delivered
-        const timelineEntry = {
-            id: this.timelineAnimationId++,
-            type: msg.type,
-            from: msg.from,
-            to: msg.to,
-            commandId: msg.commandId,
-            timestamp: this.currentTime,
-            color: this.getCommandColor(msg.commandId || 'system'),
-            phase: 'received' // Mark as received
-        };
-        
-        this.messageTimeline.push(timelineEntry);
-        
-        // Keep timeline size manageable
-        if (this.messageTimeline.length > 40) {
-            this.messageTimeline.shift();
-        }
-        
-        this.updateMessageTimeline();
+        // DEPRECATED: This method is no longer used
+        // Timeline now tracks TLA+ actions, not individual messages
     }
     
     updateMessageTimeline() {
         const timelineEl = document.getElementById('message-timeline');
         if (!timelineEl) return;
         
-        // Show recent messages in chronological order
-        const recentMessages = this.messageTimeline.slice(-40);
+        // Show recent actions in chronological order
+        const recentActions = this.actionTimeline.slice(-60);
         
-        if (recentMessages.length === 0) {
-            timelineEl.innerHTML = '<div style="text-align: center; color: #999; padding: 20px;">No messages yet - submit commands to see the protocol in action</div>';
+        if (recentActions.length === 0) {
+            timelineEl.innerHTML = '<div style="text-align: center; color: #999; padding: 20px;">No actions yet - submit commands to see the protocol in action</div>';
             return;
         }
         
         // Create SVG for timeline visualization
         const width = timelineEl.clientWidth || 800;
-        const height = Math.max(400, recentMessages.length * 15 + 100);
+        const height = Math.max(400, recentActions.length * 12 + 100);
         const replicaSpacing = width / (this.NUM_REPLICAS + 1);
-        const timeStep = 15; // Vertical space per time unit
+        const timeStep = 12; // Vertical space per action
         
         let svg = `<svg width="${width}" height="${height}" style="background: white;">`;
-        
-        // Define arrow markers at top level (once) with unique IDs
-        svg += '<defs>';
-        recentMessages.forEach((msg) => {
-            if (msg.phase === 'received' && msg.from !== msg.to) {
-                svg += `
-                    <marker id="arrowhead-${msg.id}" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
-                        <polygon points="0 0, 10 3, 0 6" fill="${msg.color}" opacity="0.6"/>
-                    </marker>
-                `;
-            }
-        });
-        svg += '</defs>';
         
         // Draw vertical lifelines for each replica
         for (let r = 0; r < this.NUM_REPLICAS; r++) {
@@ -1087,50 +1069,29 @@ class EPaxosSimulator {
             `;
         }
         
-        // Draw messages - group 'sent' and 'received' for same message together
+        // Draw action dots on lifelines
         let currentY = 50;
-        recentMessages.forEach((msg, idx) => {
-            const fromX = replicaSpacing * (msg.from + 1);
-            const toX = replicaSpacing * (msg.to + 1);
+        recentActions.forEach((actionEntry, idx) => {
+            const x = replicaSpacing * (actionEntry.replica + 1);
             const y = currentY + idx * timeStep;
             
-            if (msg.phase === 'sent') {
-                // Draw action dot at sender (when message is sent/broadcast)
-                svg += `
-                    <circle cx="${fromX}" cy="${y}" r="5" fill="${msg.color}" stroke="#333" stroke-width="1">
-                        <title>${msg.type} sent by Replica ${msg.from} (${msg.commandId})</title>
-                    </circle>
-                `;
-            } else if (msg.phase === 'received') {
-                // Draw receive visualization (when message is actually delivered)
-                if (msg.from !== msg.to) {
-                    // For messages to different replicas: draw arrow and receive dot
-                    svg += `
-                        <line x1="${fromX}" y1="${y}" x2="${toX}" y2="${y}" 
-                              stroke="${msg.color}" stroke-width="2" opacity="0.6" marker-end="url(#arrowhead-${msg.id})"/>
-                    `;
-                    
-                    // Draw receive dot
-                    svg += `
-                        <circle cx="${toX}" cy="${y}" r="4" fill="white" stroke="${msg.color}" stroke-width="2">
-                            <title>${msg.type} received by Replica ${msg.to} (${msg.commandId})</title>
-                        </circle>
-                    `;
-                    
-                    // Add message type label
-                    const labelX = (fromX + toX) / 2;
-                    svg += `
-                        <text x="${labelX}" y="${y - 3}" text-anchor="middle" font-size="10" fill="#666">${msg.type}</text>
-                    `;
-                } else {
-                    // For self-messages: just draw a receive dot on sender's lifeline
-                    svg += `
-                        <circle cx="${fromX}" cy="${y}" r="4" fill="white" stroke="${msg.color}" stroke-width="2">
-                            <title>${msg.type} received by Replica ${msg.to} (${msg.commandId})</title>
-                        </circle>
-                    `;
-                }
+            // Format action parameters for tooltip
+            let paramStr = '';
+            if (actionEntry.params.commandId) {
+                paramStr = `cmd=${actionEntry.params.commandId}`;
             }
+            if (actionEntry.params.ballot !== undefined) {
+                paramStr += paramStr ? `, bal=${actionEntry.params.ballot}` : `bal=${actionEntry.params.ballot}`;
+            }
+            
+            const tooltipText = paramStr ? `${actionEntry.action}(${paramStr})` : actionEntry.action;
+            
+            // Draw action dot
+            svg += `
+                <circle cx="${x}" cy="${y}" r="5" fill="${actionEntry.color}" stroke="#333" stroke-width="1.5">
+                    <title>Replica ${actionEntry.replica}: ${tooltipText}</title>
+                </circle>
+            `;
         });
         
         svg += '</svg>';
@@ -1298,17 +1259,20 @@ class EPaxosSimulator {
             const y = e.clientY - rect.top;
             
             let hoveredCmd = null;
+            let hoveredPos = null;
             for (const cmdId of commands) {
                 const pos = positions[cmdId];
                 const dist = Math.sqrt(Math.pow(x - pos.x, 2) + Math.pow(y - pos.y, 2));
                 if (dist < 15) {
                     hoveredCmd = cmdId;
+                    hoveredPos = pos;
                     break;
                 }
             }
             
-            if (hoveredCmd) {
-                self.showCommandTooltip(replicaId, hoveredCmd, e.clientX, e.clientY);
+            if (hoveredCmd && hoveredPos) {
+                // Pass canvas coordinates and canvas element
+                self.showCommandTooltip(replicaId, hoveredCmd, hoveredPos.x, hoveredPos.y, canvas);
                 canvas.style.cursor = 'pointer';
             } else {
                 self.hideCommandTooltip();
@@ -1359,7 +1323,7 @@ class EPaxosSimulator {
         });
     }
     
-    showCommandTooltip(replicaId, cmdId, x, y) {
+    showCommandTooltip(replicaId, cmdId, canvasX, canvasY, canvas) {
         // Remove existing tooltip
         this.hideCommandTooltip();
         
@@ -1388,10 +1352,25 @@ class EPaxosSimulator {
             <div class="tooltip-row"><span class="tooltip-label">initDep[${cmdId}]:</span> ${initDep}</div>
         `;
         
-        tooltip.style.left = (x + 10) + 'px';
-        tooltip.style.top = (y + 10) + 'px';
+        // Position tooltip relative to canvas, above the vertex
+        // Get canvas position on the page
+        const canvasRect = canvas.getBoundingClientRect();
         
+        // Add tooltip to body first to measure its dimensions
         document.body.appendChild(tooltip);
+        const tooltipRect = tooltip.getBoundingClientRect();
+        
+        // Calculate position: centered above the vertex (canvas Y position)
+        const tooltipX = canvasRect.left + canvasX - (tooltipRect.width / 2);
+        const tooltipY = canvasRect.top + canvasY - tooltipRect.height - 25; // 25px above vertex
+        
+        // Ensure tooltip doesn't go off-screen
+        const finalX = Math.max(10, Math.min(tooltipX, window.innerWidth - tooltipRect.width - 10));
+        const finalY = Math.max(10, tooltipY);
+        
+        tooltip.style.left = finalX + 'px';
+        tooltip.style.top = finalY + 'px';
+        
         this.tooltip = tooltip;
     }
     
