@@ -412,10 +412,22 @@ class EPaxosSimulator {
         // Calculate initial dependencies (conflicting commands)
         const initialDeps = this.getConflictingIds(replicaId, commandName);
         
-        // Send PreAccept messages to all replicas with random delays
+        // Coordinator immediately preaccepts locally (per TLA+ spec)
+        this.cmd[replicaId][commandId] = commandName;
+        this.initCmd[replicaId][commandId] = commandName;
+        this.initDep[replicaId][commandId] = new Set(initialDeps);
+        this.dep[replicaId][commandId] = new Set(initialDeps);
+        this.phase[replicaId][commandId] = 'preaccepted';
+        this.bal[replicaId][commandId] = 0;
+        if (!this.abal[replicaId]) this.abal[replicaId] = {};
+        this.abal[replicaId][commandId] = 0;
+        
+        this.addToHistory(`Replica ${replicaId} pre-accepted ${commandName} (${commandId}) [bal=0] with deps: ${Array.from(initialDeps).join(', ') || 'none'}`, commandId);
+        
+        // Send PreAccept messages to all OTHER replicas with random delays
         // Each message gets a separate copy with independent delay
         for (let r = 0; r < this.NUM_REPLICAS; r++) {
-            if (this.isReplicaConnected(r)) {
+            if (r !== replicaId && this.isReplicaConnected(r)) {
                 // Create a fresh message object for each recipient
                 const msg = {
                     type: 'PreAccept',
@@ -596,13 +608,12 @@ class EPaxosSimulator {
             return;
         }
         
-        // Put the message back in the queue temporarily for quorum counting
-        // (it was removed by step() before this handler was called)
-        this.messages.push(msg);
-        
         // Count unique replicas that have sent PreAcceptOK for this command
-        const okSenders = new Set();
-        const okMsgs = [];
+        // Include the current message in the count (it was already removed from queue by step())
+        const okSenders = new Set([msg.from]); //  Start with current message sender
+        const okMsgs = [msg]; // Start with current message
+        
+        // Also count messages still in the queue
         for (const m of this.messages) {
             if (m.type === 'PreAcceptOK' && m.to === r && m.commandId === id) {
                 okSenders.add(m.from);
@@ -630,7 +641,8 @@ class EPaxosSimulator {
             const canFastCommit = okSenders.size >= this.FAST_QUORUM_SIZE &&
                 okMsgs.every(m => this.setsEqual(m.dep, initialDeps));
             
-            // Remove all processed PreAcceptOK messages from queue (per TLA+ spec)
+            // Remove all other PreAcceptOK messages from queue (per TLA+ spec)
+            // The current message was already removed by step()
             this.messages = this.messages.filter(m => 
                 !(m.type === 'PreAcceptOK' && m.to === r && m.commandId === id)
             );
@@ -649,10 +661,6 @@ class EPaxosSimulator {
                             bal: 0
                         };
                         this.addMessageWithRandomDelay(commitMsg);
-                        // Only track inter-replica messages in timeline (not self-messages)
-                        if (r !== replica) {
-                            
-                        }
                     }
                 }
                 this.addToHistory(`Replica ${r} taking fast path for ${id}`, id);
@@ -670,18 +678,12 @@ class EPaxosSimulator {
                             bal: 0
                         };
                         this.addMessageWithRandomDelay(acceptMsg);
-                        // Only track inter-replica messages in timeline (not self-messages)
-                        if (r !== replica) {
-                            
-                        }
                     }
                 }
                 this.addToHistory(`Replica ${r} taking slow path for ${id}`, id);
             }
-        } else {
-            // Not enough responses yet, remove the message we temporarily added
-            this.messages = this.messages.filter(m => m !== msg);
         }
+        // If quorum not reached, do nothing - message has already been processed and removed from queue
     }
     
     handleAccept(msg) {
