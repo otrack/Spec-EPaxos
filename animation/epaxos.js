@@ -340,7 +340,10 @@ class EPaxosSimulator {
                     bal: newBal
                 };
                 this.addMessageWithRandomDelay(recoverMsg);
-                this.trackMessageTimeline(recoverMsg);
+                // Only track inter-replica messages in timeline (not self-messages)
+                if (replicaId !== r) {
+                    this.trackMessageTimeline(recoverMsg);
+                }
             }
         }
         
@@ -422,7 +425,10 @@ class EPaxosSimulator {
                     bal: 0
                 };
                 this.addMessageWithRandomDelay(msg);
-                this.trackMessageTimeline(msg);
+                // Only track inter-replica messages in timeline (not self-messages)
+                if (replicaId !== r) {
+                    this.trackMessageTimeline(msg);
+                }
             }
         }
     }
@@ -575,7 +581,10 @@ class EPaxosSimulator {
                 bal: msg.bal
             };
             this.addMessageWithRandomDelay(okMsg);
-            this.trackMessageTimeline(okMsg);
+            // Only track inter-replica messages in timeline (not self-messages)
+            if (r !== msg.from) {
+                this.trackMessageTimeline(okMsg);
+            }
             
             this.addToHistory(`Replica ${r} pre-accepted ${msg.cmd} (${id}) [bal=${msg.bal}] with deps: ${Array.from(finalDeps).join(', ') || 'none'}`, id);
         }
@@ -642,7 +651,10 @@ class EPaxosSimulator {
                             bal: 0
                         };
                         this.addMessageWithRandomDelay(commitMsg);
-                        this.trackMessageTimeline(commitMsg);
+                        // Only track inter-replica messages in timeline (not self-messages)
+                        if (r !== replica) {
+                            this.trackMessageTimeline(commitMsg);
+                        }
                     }
                 }
                 this.addToHistory(`Replica ${r} taking fast path for ${id}`, id);
@@ -660,7 +672,10 @@ class EPaxosSimulator {
                             bal: 0
                         };
                         this.addMessageWithRandomDelay(acceptMsg);
-                        this.trackMessageTimeline(acceptMsg);
+                        // Only track inter-replica messages in timeline (not self-messages)
+                        if (r !== replica) {
+                            this.trackMessageTimeline(acceptMsg);
+                        }
                     }
                 }
                 this.addToHistory(`Replica ${r} taking slow path for ${id}`, id);
@@ -701,7 +716,10 @@ class EPaxosSimulator {
                 bal: msg.bal
             };
             this.addMessageWithRandomDelay(okMsg);
-            this.trackMessageTimeline(okMsg);
+            // Only track inter-replica messages in timeline (not self-messages)
+            if (r !== msg.from) {
+                this.trackMessageTimeline(okMsg);
+            }
             
             this.addToHistory(`Replica ${r} accepted ${msg.cmd} (${id}) [bal=${msg.bal}]`, id);
         }
@@ -746,7 +764,10 @@ class EPaxosSimulator {
                         bal: msg.bal
                     };
                     this.addMessageWithRandomDelay(commitMsg);
-                    this.trackMessageTimeline(commitMsg);
+                    // Only track inter-replica messages in timeline (not self-messages)
+                    if (r !== replica) {
+                        this.trackMessageTimeline(commitMsg);
+                    }
                 }
             }
             
@@ -807,7 +828,10 @@ class EPaxosSimulator {
                 phase: phaseValue
             };
             this.addMessageWithRandomDelay(recoverOKMsg);
-            this.trackMessageTimeline(recoverOKMsg);
+            // Only track inter-replica messages in timeline (not self-messages)
+            if (r !== msg.from) {
+                this.trackMessageTimeline(recoverOKMsg);
+            }
             
             this.addToHistory(`Replica ${r} sent RecoverOK for ${id} [bal=${b}]`, id);
         }
