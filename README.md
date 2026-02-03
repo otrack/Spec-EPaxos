@@ -7,3 +7,7 @@ To run the model, use the following command as a template (you will need the tla
 java -cp $PATH_TO_tla2tools.jar$/tla2tools.jar tlc2.TLC $SPEC_FILE_NAME$.tla
 the .cfg file can be modified to change the parameters with which the model is ran.
 
+## Interactive Animation
+
+The `animation/` directory contains an interactive JavaScript visualization of the EPaxos protocol based on the `EPaxosRecovery/EPaxosCommitWithRecovery.tla` specification. Open `animation/index.html` in a web browser to explore the protocol with 5 replicas, dependency graphs, and step-by-step execution. See [animation/README.md](animation/README.md) for details.
+

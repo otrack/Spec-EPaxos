@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EPaxos Visualization</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Egalitarian Paxos (EPaxos) Visualization</h1>
+            <p class="subtitle">Interactive animation of the EPaxos consensus protocol</p>
+        </header>
+
+        <div class="controls-section">
+            <div class="controls">
+                <h3>Submit Command</h3>
+                <div class="control-group">
+                    <label for="replica-select">Replica:</label>
+                    <select id="replica-select">
+                        <option value="0">Replica 0</option>
+                        <option value="1">Replica 1</option>
+                        <option value="2">Replica 2</option>
+                        <option value="3">Replica 3</option>
+                        <option value="4">Replica 4</option>
+                    </select>
+                </div>
+                <div class="control-group">
+                    <label for="command-input">Command:</label>
+                    <input type="text" id="command-input" placeholder="e.g., A, B, C">
+                </div>
+                <div class="control-group">
+                    <label for="conflicts-input">Conflicts with:</label>
+                    <input type="text" id="conflicts-input" placeholder="e.g., A, B (comma separated)">
+                </div>
+                <button id="submit-btn" class="btn btn-primary">Submit Command</button>
+            </div>
+
+            <div class="controls">
+                <h3>Execution Control</h3>
+                <div class="button-group">
+                    <button id="step-btn" class="btn">Step</button>
+                    <button id="play-btn" class="btn">Play</button>
+                    <button id="pause-btn" class="btn" disabled>Pause</button>
+                    <button id="reset-btn" class="btn btn-danger">Reset</button>
+                </div>
+                <div class="control-group" style="margin-top: 10px;">
+                    <label for="recovery-command-select">Recover Command:</label>
+                    <select id="recovery-command-select">
+                        <option value="">-- Select command --</option>
+                    </select>
+                </div>
+                <div class="button-group">
+                    <button id="recovery-btn" class="btn btn-warning">Start Recovery</button>
+                </div>
+                <div class="control-group">
+                    <label>
+                        <input type="checkbox" id="async-mode-checkbox">
+                        Asynchronous Mode
+                    </label>
+                </div>
+                <div class="control-group">
+                    <label for="speed-slider">Speed:</label>
+                    <input type="range" id="speed-slider" min="500" max="3000" value="1500" step="100">
+                    <span id="speed-value">1.5s</span>
+                </div>
+            </div>
+
+            <div class="status">
+                <h3>Execution History</h3>
+                <div id="execution-history" class="execution-history"></div>
+                <div class="message-queue">
+                    <strong>Message Queue:</strong> <span id="queue-count">0</span> messages
+                </div>
+            </div>
+        </div>
+
+        <!-- Message Timeline Visualization -->
+        <div class="message-timeline-container">
+            <h3>Message Timeline</h3>
+            <div id="message-timeline" class="message-timeline"></div>
+        </div>
+
+        <div class="message-animation-layer" id="message-animation-layer"></div>
+
+        <div class="replicas-container">
+            <div class="replica" data-replica="0">
+                <div class="replica-header">
+                    Replica 0
+                    <button id="disconnect-btn-0" class="btn-disconnect">Disconnect</button>
+                </div>
+                <div class="replica-state">
+                    <h4>Commands</h4>
+                    <div class="commands-list" id="commands-0"></div>
+                    <h4>Dependency Graph</h4>
+                    <canvas class="dep-graph" id="graph-0" width="200" height="200"></canvas>
+                </div>
+            </div>
+            <div class="replica" data-replica="1">
+                <div class="replica-header">
+                    Replica 1
+                    <button id="disconnect-btn-1" class="btn-disconnect">Disconnect</button>
+                </div>
+                <div class="replica-state">
+                    <h4>Commands</h4>
+                    <div class="commands-list" id="commands-1"></div>
+                    <h4>Dependency Graph</h4>
+                    <canvas class="dep-graph" id="graph-1" width="200" height="200"></canvas>
+                </div>
+            </div>
+            <div class="replica" data-replica="2">
+                <div class="replica-header">
+                    Replica 2
+                    <button id="disconnect-btn-2" class="btn-disconnect">Disconnect</button>
+                </div>
+                <div class="replica-state">
+                    <h4>Commands</h4>
+                    <div class="commands-list" id="commands-2"></div>
+                    <h4>Dependency Graph</h4>
+                    <canvas class="dep-graph" id="graph-2" width="200" height="200"></canvas>
+                </div>
+            </div>
+            <div class="replica" data-replica="3">
+                <div class="replica-header">
+                    Replica 3
+                    <button id="disconnect-btn-3" class="btn-disconnect">Disconnect</button>
+                </div>
+                <div class="replica-state">
+                    <h4>Commands</h4>
+                    <div class="commands-list" id="commands-3"></div>
+                    <h4>Dependency Graph</h4>
+                    <canvas class="dep-graph" id="graph-3" width="200" height="200"></canvas>
+                </div>
+            </div>
+            <div class="replica" data-replica="4">
+                <div class="replica-header">
+                    Replica 4
+                    <button id="disconnect-btn-4" class="btn-disconnect">Disconnect</button>
+                </div>
+                <div class="replica-state">
+                    <h4>Commands</h4>
+                    <div class="commands-list" id="commands-4"></div>
+                    <h4>Dependency Graph</h4>
+                    <canvas class="dep-graph" id="graph-4" width="200" height="200"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <div class="legend">
+            <h3>Legend</h3>
+            <div class="legend-item">
+                <span class="status-badge status-initial">Initial</span>
+                <span>Command not yet submitted</span>
+            </div>
+            <div class="legend-item">
+                <span class="status-badge status-preaccepted">PreAccepted</span>
+                <span>Command received PreAccept message</span>
+            </div>
+            <div class="legend-item">
+                <span class="status-badge status-accepted">Accepted</span>
+                <span>Command received Accept message</span>
+            </div>
+            <div class="legend-item">
+                <span class="status-badge status-committed">Committed</span>
+                <span>Command is committed and can be executed</span>
+            </div>
+        </div>
+    </div>
+
+    <script src="epaxos.js"></script>
+</body>
+</html>
